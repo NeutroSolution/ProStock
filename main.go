@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	addr := ":" + envOr("PORT", "8080")
 
@@ -52,7 +55,7 @@ func main() {
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("listening on %s", addr)
+	log.Printf("prostock %s listening on %s", version, addr)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -70,6 +73,7 @@ func newRouter(db pinger) http.Handler {
 
 type healthResponse struct {
 	Status   string `json:"status"`
+	Version  string `json:"version"`
 	Database string `json:"database"`
 }
 
@@ -78,10 +82,10 @@ func handleHealth(db pinger) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		resp, code := healthResponse{Status: "ok", Database: "up"}, http.StatusOK
+		resp, code := healthResponse{Status: "ok", Version: version, Database: "up"}, http.StatusOK
 		if err := db.Ping(ctx); err != nil {
 			log.Printf("health: database ping failed: %v", err)
-			resp, code = healthResponse{Status: "degraded", Database: "down"}, http.StatusServiceUnavailable
+			resp, code = healthResponse{Status: "degraded", Version: version, Database: "down"}, http.StatusServiceUnavailable
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -15,11 +15,13 @@ ProStock is an early-stage HTTP API server in Go backed by PostgreSQL via `githu
 
 - `Dockerfile`: multi-stage build into `distroless/static:nonroot`. There is no shell or curl, so the `HEALTHCHECK` runs `/prostock healthcheck` (handled at the top of `main()`). It is a liveness probe: it accepts 200 or 503, so a database outage doesn't make Swarm restart the API replicas.
 - `docker-compose.yml`: swarm stack with `api` + `db` (Postgres 17). `api` joins the external `dokploy-network` so Dokploy's Traefik can route to it; `db` is only on the `internal` overlay. `api` receives `DATABASE_URL` built from the `POSTGRES_*` vars.
+- `.github/workflows/release.yml`: on push to `main`, tests, computes the next semver from conventional commits since the last `v*` tag (`!`/`BREAKING CHANGE` → major, `feat:` → minor, else patch), pushes `10091991/prostock:<version>` + `:latest` (amd64), then pushes the git tag `v<version>`. Needs repo variable `DOCKERHUB_USERNAME` and secret `DOCKERHUB_TOKEN`.
+- `main.version` is injected via `-ldflags -X` from the `VERSION` build arg (default `dev`) and returned in `/health`.
 - `docker stack deploy` ignores `build:`, so stack mode needs `APP_IMAGE` pointing to a pushed image. `POSTGRES_PASSWORD` is required.
 
 ## Endpoints
 
-- `GET /health` → `200 {"status":"ok","database":"up"}`, or `503 {"status":"degraded","database":"down"}` when the 2s DB ping fails (error is logged, not returned).
+- `GET /health` → `200 {"status":"ok","version":"...","database":"up"}`, or `503 {"status":"degraded","version":"...","database":"down"}` when the 2s DB ping fails (error is logged, not returned).
 
 ## Commands
 

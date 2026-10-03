@@ -1,0 +1,113 @@
+# Builds and pushes the Docker image with an auto-incremented semver on every
+# push to main. The bump comes from conventional commit messages since the last
+# v* tag:
+#   feat!: / fix!: / "BREAKING CHANGE"  -> major (0.4.2 -> 1.0.0)
+#   feat:                                -> minor (0.4.2 -> 0.5.0)
+#   anything else                        -> patch (0.4.2 -> 0.4.3)
+# Run it manually from the Actions tab to force a specific bump.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump (auto = from commit messages)
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: write # push the version tag
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: 10091991/prostock
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history and tags for version calculation
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Compute next version
+        id: version
+        env:
+          BUMP_INPUT: ${{ inputs.bump || 'auto' }}
+        run: |
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          if [ -n "$latest" ]; then
+            range="$latest..HEAD"
+          else
+            latest="v0.0.0"
+            range="HEAD"
+          fi
+          IFS=. read -r major minor patch <<< "${latest#v}"
+
+          bump="$BUMP_INPUT"
+          if [ "$bump" = auto ]; then
+            messages=$(git log --format=%B "$range")
+            if grep -qE '^[a-z]+(\([^)]*\))?!:|BREAKING CHANGE' <<< "$messages"; then
+              bump=major
+            elif grep -qE '^feat(\([^)]*\))?:' <<< "$messages"; then
+              bump=minor
+            else
+              bump=patch
+            fi
+          fi
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          version="$major.$minor.$patch"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Previous: $latest  Bump: $bump  Next: v$version" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Tag only after the image is pushed, so a failed build doesn't use up a version.
+      - name: Tag release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          echo "Image: \`$IMAGE:$VERSION\`" >> "$GITHUB_STEP_SUMMARY"

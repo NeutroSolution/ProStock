@@ -20,8 +20,8 @@ func TestHealth(t *testing.T) {
 		wantCode int
 		wantBody string
 	}{
-		{"database up", fakeDB{}, http.StatusOK, `{"status":"ok","database":"up"}`},
-		{"database down", fakeDB{errors.New("connection refused")}, http.StatusServiceUnavailable, `{"status":"degraded","database":"down"}`},
+		{"database up", fakeDB{}, http.StatusOK, `{"status":"ok","version":"dev","database":"up"}`},
+		{"database down", fakeDB{errors.New("connection refused")}, http.StatusServiceUnavailable, `{"status":"degraded","version":"dev","database":"down"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
