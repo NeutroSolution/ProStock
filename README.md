@@ -61,6 +61,26 @@ Every push to `main` (except Markdown-only changes) runs `.github/workflows/rele
 
 To force a bump, run the workflow from **Actions → Release → Run workflow**. The running version is returned by `/health`.
 
+### Version naming
+
+The same version is written two ways:
+
+| Where          | Format             | Example                    |
+|----------------|--------------------|----------------------------|
+| Git tag        | with `v` prefix    | `v0.1.0`                   |
+| Docker image   | without `v` prefix | `10091991/prostock:0.1.0`  |
+| `/health`      | without `v` prefix | `"version":"0.1.0"`        |
+
+The `v0.1.0 -> v0.1.0` line in the workflow log is git's normal output for pushing a tag (local name → remote name), not a missing bump.
+
+### Deploying a release
+
+1. Check that the **Release** run on GitHub succeeded and note the version, e.g. `0.1.0`.
+2. In Dokploy, set `APP_IMAGE=10091991/prostock:0.1.0` (no `v`) and redeploy.
+3. Confirm with `curl https://<your-domain>/health`; it should show `"version":"0.1.0"`.
+
+To roll back, set `APP_IMAGE` to the previous version and redeploy.
+
 Required GitHub repository settings (**Settings → Secrets and variables → Actions**):
 
 - Variable `DOCKERHUB_USERNAME` = `10091991`
