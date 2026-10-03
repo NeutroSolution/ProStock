@@ -1,1 +1,15 @@
+# Local secrets
 .env
+.env.*
+
+# Build output
+/ProStock
+/prostock
+*.exe
+*.test
+*.out
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
