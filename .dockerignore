@@ -1,0 +1,7 @@
+.git
+.idea
+*_test.go
+Dockerfile
+docker-compose.yml
+.env
+CLAUDE.md

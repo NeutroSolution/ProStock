@@ -1,0 +1,58 @@
+# Swarm stack for Dokploy (Compose service, type "Stack").
+# Set the variables below in Dokploy's Environment tab.
+# `docker stack deploy` ignores `build:`, so APP_IMAGE must point to a
+# pushed image; plain `docker compose` builds it from the Dockerfile.
+services:
+  api:
+    image: ${APP_IMAGE:-prostock:latest}
+    build: .
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-prostock}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-prostock}?sslmode=disable
+    networks:
+      - internal
+      - dokploy-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-prostock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-prostock}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      # Local volume lives on one node; keep Postgres pinned to it.
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+networks:
+  internal:
+    driver: overlay
+  dokploy-network:
+    external: true
+
+volumes:
+  pgdata:
